@@ -295,7 +295,7 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ icon: Icon, label, value, suffix, accent }: { icon: any; label: string; value: string; suffix?: string; accent: "primary"|"success"|"accent"|"warning" }) {
+function StatCard({ icon: Icon, label, value, suffix, accent, delay = 0 }: { icon: any; label: string; value: string; suffix?: string; accent: "primary"|"success"|"accent"|"warning"; delay?: number }) {
   const styles = {
     primary: "from-primary to-primary-glow text-primary-foreground",
     success: "from-success to-success/70 text-success-foreground",
@@ -303,7 +303,7 @@ function StatCard({ icon: Icon, label, value, suffix, accent }: { icon: any; lab
     warning: "from-warning to-warning/70 text-warning-foreground",
   }[accent];
   return (
-    <div className="glass-card rounded-2xl p-5 hover-bounce">
+    <div className="glass-card rounded-2xl p-5 hover-bounce animate-fade-up" style={{ animationDelay: `${delay}s` }}>
       <div className={`inline-flex w-10 h-10 rounded-xl bg-gradient-to-br ${styles} items-center justify-center mb-3 shadow-soft`}>
         <Icon className="w-5 h-5" />
       </div>
