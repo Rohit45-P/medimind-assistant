@@ -31,31 +31,61 @@ export default function Dashboard() {
   useEffect(() => { if (user) load(); }, [user]);
   useEffect(() => { requestNotificationPermission(); }, []);
 
-  // Reminder loop
+  // Smart reminder loop: warns 5 min before, alerts on time, escalates if overdue
   useEffect(() => {
     const checked = new Set<string>();
     const id = setInterval(() => {
-      const today = new Date().toISOString().slice(0, 10);
-      const hhmm = new Date().toTimeString().slice(0, 5);
+      const nowD = new Date();
+      const today = nowD.toISOString().slice(0, 10);
+      const nowMin = nowD.getHours() * 60 + nowD.getMinutes();
       meds.forEach((m) => {
         m.times.forEach((t) => {
-          const key = `${m.id}-${t}-${today}`;
-          if (t === hhmm && !checked.has(key)) {
-            checked.add(key);
-            const alreadyLogged = logs.some(
-              (l) => l.medication_id === m.id && l.scheduled_time === t && l.scheduled_date === today
-            );
-            if (!alreadyLogged) {
-              showNotification("MediRecall reminder", `Time to take ${m.name}${m.dosage ? ` (${m.dosage})` : ""}`);
-              speak(`It's time to take your ${m.name}`);
-              toast(`💊 Time for ${m.name}`, { description: m.dosage });
-            }
+          const [hh, mm] = t.split(":").map(Number);
+          const schedMin = hh * 60 + mm;
+          const diff = schedMin - nowMin;
+          const alreadyLogged = logs.some(
+            (l) => l.medication_id === m.id && l.scheduled_time === t && l.scheduled_date === today
+          );
+          if (alreadyLogged) return;
+
+          // 5 min advance warning
+          const warnKey = `warn-${m.id}-${t}-${today}`;
+          if (diff === 5 && !checked.has(warnKey)) {
+            checked.add(warnKey);
+            toast(`⏰ ${m.name} in 5 minutes`, { description: m.dosage });
+          }
+          // On-time alert
+          const dueKey = `due-${m.id}-${t}-${today}`;
+          if (diff === 0 && !checked.has(dueKey)) {
+            checked.add(dueKey);
+            showNotification("MediRecall — time for your dose", `${m.name}${m.dosage ? ` (${m.dosage})` : ""}`);
+            speak(`It's time to take your ${m.name}`);
+            toast(`💊 Time for ${m.name}`, { description: m.dosage, duration: 10000 });
+          }
+          // Overdue escalation at 15 min
+          const overKey = `over-${m.id}-${t}-${today}`;
+          if (diff === -15 && !checked.has(overKey)) {
+            checked.add(overKey);
+            showNotification("⚠️ Dose overdue", `${m.name} was scheduled 15 min ago`);
+            speak(`Reminder: your ${m.name} dose is overdue`);
+            toast.warning(`${m.name} is 15 min overdue`, { duration: 12000 });
           }
         });
       });
     }, 30 * 1000);
     return () => clearInterval(id);
   }, [meds, logs]);
+
+  // Realtime sync from caregiver actions or other devices
+  useEffect(() => {
+    if (!user) return;
+    const ch = supabase
+      .channel("dash-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "medication_logs", filter: `user_id=eq.${user.id}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "medications", filter: `user_id=eq.${user.id}` }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user]);
 
   async function load() {
     if (!user) return;
@@ -126,9 +156,22 @@ export default function Dashboard() {
   }
 
   const nextDose = todaysSchedule.find((s) => !s.logged);
+  const countdown = useMemo(() => {
+    if (!nextDose) return null;
+    const [h, m] = nextDose.time.split(":").map(Number);
+    const target = new Date(); target.setHours(h, m, 0, 0);
+    const diffMs = target.getTime() - now.getTime();
+    if (diffMs < -60 * 60 * 1000) return null;
+    const mins = Math.round(diffMs / 60000);
+    if (mins > 60) return `in ${Math.floor(mins/60)}h ${mins%60}m`;
+    if (mins > 0) return `in ${mins} min`;
+    if (mins === 0) return "right now";
+    return `${Math.abs(mins)} min overdue`;
+  }, [nextDose, now]);
+  const isOverdue = countdown?.includes("overdue");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-up">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold">Hello, {profile?.full_name?.split(" ")[0] || "friend"} 👋</h1>
@@ -142,23 +185,26 @@ export default function Dashboard() {
 
       {/* Stat row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={Pill} label="Today's doses" value={`${todaysSchedule.filter(s=>s.logged?.status==="taken").length}/${todaysSchedule.length}`} accent="primary" />
-        <StatCard icon={Activity} label="Health score" value={`${score}`} suffix="/100" accent="success" />
-        <StatCard icon={Bell} label="Active medications" value={meds.length.toString()} accent="accent" />
-        <StatCard icon={Brain} label="Active insights" value={insights.length.toString()} accent="warning" />
+        <StatCard icon={Pill} label="Today's doses" value={`${todaysSchedule.filter(s=>s.logged?.status==="taken").length}/${todaysSchedule.length}`} accent="primary" delay={0} />
+        <StatCard icon={Activity} label="Health score" value={`${score}`} suffix="/100" accent="success" delay={0.05} />
+        <StatCard icon={Bell} label="Active medications" value={meds.length.toString()} accent="accent" delay={0.1} />
+        <StatCard icon={Brain} label="Active insights" value={insights.length.toString()} accent="warning" delay={0.15} />
       </div>
 
       {/* Hero next-dose */}
       {nextDose ? (
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-hero p-8 text-primary-foreground shadow-elegant">
-          <div className="absolute -right-8 -bottom-8 opacity-20">
+        <div className={`relative overflow-hidden rounded-3xl bg-gradient-hero p-8 text-primary-foreground shadow-elegant animate-scale-in ${isOverdue ? "ring-4 ring-destructive/60 animate-pulse-soft" : ""}`}>
+          <div className="absolute -right-8 -bottom-8 opacity-20 animate-float">
             <Pill className="w-48 h-48" />
           </div>
           <div className="relative">
-            <div className="text-sm opacity-90 mb-1">Next up at {nextDose.time}</div>
+            <div className="text-sm opacity-90 mb-1 flex items-center gap-2">
+              <span className="inline-flex w-2 h-2 rounded-full bg-white animate-pulse-soft" />
+              Next up at {nextDose.time} {countdown && <span className="font-semibold">· {countdown}</span>}
+            </div>
             <div className="text-3xl md:text-4xl font-bold mb-1">{nextDose.med.name}</div>
             {nextDose.med.dosage && <div className="opacity-90">{nextDose.med.dosage}</div>}
-            <div className="flex gap-3 mt-5">
+            <div className="flex flex-wrap gap-3 mt-5">
               <Button onClick={() => logDose(nextDose.med, nextDose.time, "taken")} className="bg-card text-foreground hover:bg-card/90 hover-bounce">
                 <Check className="w-4 h-4 mr-2" /> Mark as taken
               </Button>
@@ -169,7 +215,7 @@ export default function Dashboard() {
           </div>
         </div>
       ) : (
-        <div className="rounded-3xl glass-card p-8 text-center">
+        <div className="rounded-3xl glass-card p-8 text-center animate-scale-in">
           <div className="text-2xl font-semibold mb-2">All caught up for today 🎉</div>
           <p className="text-muted-foreground">No remaining doses scheduled. Great work!</p>
         </div>
@@ -249,7 +295,7 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ icon: Icon, label, value, suffix, accent }: { icon: any; label: string; value: string; suffix?: string; accent: "primary"|"success"|"accent"|"warning" }) {
+function StatCard({ icon: Icon, label, value, suffix, accent, delay = 0 }: { icon: any; label: string; value: string; suffix?: string; accent: "primary"|"success"|"accent"|"warning"; delay?: number }) {
   const styles = {
     primary: "from-primary to-primary-glow text-primary-foreground",
     success: "from-success to-success/70 text-success-foreground",
@@ -257,7 +303,7 @@ function StatCard({ icon: Icon, label, value, suffix, accent }: { icon: any; lab
     warning: "from-warning to-warning/70 text-warning-foreground",
   }[accent];
   return (
-    <div className="glass-card rounded-2xl p-5 hover-bounce">
+    <div className="glass-card rounded-2xl p-5 hover-bounce animate-fade-up" style={{ animationDelay: `${delay}s` }}>
       <div className={`inline-flex w-10 h-10 rounded-xl bg-gradient-to-br ${styles} items-center justify-center mb-3 shadow-soft`}>
         <Icon className="w-5 h-5" />
       </div>
