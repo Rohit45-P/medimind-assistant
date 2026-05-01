@@ -31,31 +31,61 @@ export default function Dashboard() {
   useEffect(() => { if (user) load(); }, [user]);
   useEffect(() => { requestNotificationPermission(); }, []);
 
-  // Reminder loop
+  // Smart reminder loop: warns 5 min before, alerts on time, escalates if overdue
   useEffect(() => {
     const checked = new Set<string>();
     const id = setInterval(() => {
-      const today = new Date().toISOString().slice(0, 10);
-      const hhmm = new Date().toTimeString().slice(0, 5);
+      const nowD = new Date();
+      const today = nowD.toISOString().slice(0, 10);
+      const nowMin = nowD.getHours() * 60 + nowD.getMinutes();
       meds.forEach((m) => {
         m.times.forEach((t) => {
-          const key = `${m.id}-${t}-${today}`;
-          if (t === hhmm && !checked.has(key)) {
-            checked.add(key);
-            const alreadyLogged = logs.some(
-              (l) => l.medication_id === m.id && l.scheduled_time === t && l.scheduled_date === today
-            );
-            if (!alreadyLogged) {
-              showNotification("MediRecall reminder", `Time to take ${m.name}${m.dosage ? ` (${m.dosage})` : ""}`);
-              speak(`It's time to take your ${m.name}`);
-              toast(`💊 Time for ${m.name}`, { description: m.dosage });
-            }
+          const [hh, mm] = t.split(":").map(Number);
+          const schedMin = hh * 60 + mm;
+          const diff = schedMin - nowMin;
+          const alreadyLogged = logs.some(
+            (l) => l.medication_id === m.id && l.scheduled_time === t && l.scheduled_date === today
+          );
+          if (alreadyLogged) return;
+
+          // 5 min advance warning
+          const warnKey = `warn-${m.id}-${t}-${today}`;
+          if (diff === 5 && !checked.has(warnKey)) {
+            checked.add(warnKey);
+            toast(`⏰ ${m.name} in 5 minutes`, { description: m.dosage });
+          }
+          // On-time alert
+          const dueKey = `due-${m.id}-${t}-${today}`;
+          if (diff === 0 && !checked.has(dueKey)) {
+            checked.add(dueKey);
+            showNotification("MediRecall — time for your dose", `${m.name}${m.dosage ? ` (${m.dosage})` : ""}`);
+            speak(`It's time to take your ${m.name}`);
+            toast(`💊 Time for ${m.name}`, { description: m.dosage, duration: 10000 });
+          }
+          // Overdue escalation at 15 min
+          const overKey = `over-${m.id}-${t}-${today}`;
+          if (diff === -15 && !checked.has(overKey)) {
+            checked.add(overKey);
+            showNotification("⚠️ Dose overdue", `${m.name} was scheduled 15 min ago`);
+            speak(`Reminder: your ${m.name} dose is overdue`);
+            toast.warning(`${m.name} is 15 min overdue`, { duration: 12000 });
           }
         });
       });
     }, 30 * 1000);
     return () => clearInterval(id);
   }, [meds, logs]);
+
+  // Realtime sync from caregiver actions or other devices
+  useEffect(() => {
+    if (!user) return;
+    const ch = supabase
+      .channel("dash-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "medication_logs", filter: `user_id=eq.${user.id}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "medications", filter: `user_id=eq.${user.id}` }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user]);
 
   async function load() {
     if (!user) return;
