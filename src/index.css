@@ -150,6 +150,7 @@
   .glass-card {
     @apply bg-card/70 backdrop-blur-xl border border-border/60;
     box-shadow: var(--shadow-card);
+    transition: var(--transition-smooth);
   }
   .gradient-text {
     @apply bg-clip-text text-transparent;
@@ -162,6 +163,57 @@
     transform: translateY(-4px) scale(1.02);
     box-shadow: var(--shadow-elegant);
   }
+  /* Premium hover: subtle lift + glow ring + border tint */
+  .hover-glow {
+    position: relative;
+    transition: var(--transition-smooth);
+  }
+  .hover-glow::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: var(--gradient-primary);
+    opacity: 0;
+    z-index: -1;
+    transition: opacity 0.4s ease;
+    filter: blur(12px);
+  }
+  .hover-glow:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-elegant);
+    border-color: hsl(var(--primary) / 0.5);
+  }
+  .hover-glow:hover::before { opacity: 0.45; }
+
+  /* Tilt-on-hover for cards */
+  .hover-tilt {
+    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
+  }
+  .hover-tilt:hover {
+    transform: perspective(900px) rotateX(2deg) rotateY(-2deg) translateY(-4px) scale(1.015);
+    box-shadow: var(--shadow-elegant);
+  }
+
+  /* Sheen sweep effect */
+  .hover-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+  .hover-sheen::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -75%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent, hsl(0 0% 100% / 0.25), transparent);
+    transform: skewX(-20deg);
+    transition: left 0.7s ease;
+    pointer-events: none;
+  }
+  .hover-sheen:hover::after { left: 125%; }
+
   .mesh-bg {
     background-image: var(--gradient-mesh);
   }

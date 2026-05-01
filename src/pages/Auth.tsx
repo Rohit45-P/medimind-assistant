@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { HeartPulse, Loader2, User, Users, Mail, Phone } from "lucide-react";
+import { Loader2, User, Users, Mail, Phone, ShieldCheck, Sparkles, Heart } from "lucide-react";
+import Logo from "@/components/Logo";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -132,14 +133,44 @@ export default function Auth() {
   }
 
   return (
-    <div className="min-h-screen mesh-bg flex items-center justify-center p-4">
-      <div className="w-full max-w-md animate-scale-in">
-        <Link to="/" className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow animate-float">
-            <HeartPulse className="w-6 h-6 text-primary-foreground" />
+    <div className="min-h-screen mesh-bg flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Decorative blobs */}
+      <div className="absolute top-10 -left-20 w-72 h-72 bg-primary/20 rounded-full blur-3xl animate-float" />
+      <div className="absolute bottom-10 -right-20 w-80 h-80 bg-accent/20 rounded-full blur-3xl animate-float" style={{ animationDelay: "2s" }} />
+
+      <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-8 items-center relative z-10">
+        {/* Left: Brand panel (desktop) */}
+        <div className="hidden lg:flex flex-col gap-6 p-8 animate-fade-up">
+          <Link to="/" className="hover-bounce inline-block w-fit">
+            <Logo size={64} textClassName="text-3xl" animated />
+          </Link>
+          <h1 className="text-4xl xl:text-5xl font-extrabold leading-tight">
+            Your <span className="gradient-text">digital memory</span><br />for better health.
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Smart reminders, voice logging, and caregiver support — all in one calm, beautiful app.
+          </p>
+          <div className="space-y-3 pt-2">
+            {[
+              { icon: ShieldCheck, text: "Bank-grade encryption & privacy" },
+              { icon: Sparkles, text: "AI-powered health insights" },
+              { icon: Heart, text: "Loved by patients & caregivers" },
+            ].map((f, i) => (
+              <div key={i} className="flex items-center gap-3 animate-slide-in" style={{ animationDelay: `${0.2 + i * 0.1}s` }}>
+                <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-soft shrink-0">
+                  <f.icon className="w-5 h-5 text-primary-foreground" />
+                </div>
+                <span className="text-sm font-medium">{f.text}</span>
+              </div>
+            ))}
           </div>
-          <span className="font-bold text-2xl gradient-text">MediRecall</span>
-        </Link>
+        </div>
+
+        {/* Right: Auth card */}
+        <div className="w-full max-w-md mx-auto animate-scale-in">
+          <Link to="/" className="lg:hidden flex items-center justify-center mb-6">
+            <Logo size={48} textClassName="text-2xl" animated />
+          </Link>
 
         <div className="glass-card rounded-3xl p-6 md:p-8 shadow-elegant">
           <Button
@@ -246,6 +277,7 @@ export default function Auth() {
               )}
             </TabsContent>
           </Tabs>
+        </div>
         </div>
       </div>
     </div>

@@ -1,9 +1,9 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Pill, Activity, Bell, Users, FileText, LogOut, Moon, Sun, HeartPulse } from "lucide-react";
-import { useEffect, useState } from "react";
-import { ReactNode } from "react";
+import { LayoutDashboard, Pill, Activity, Bell, Users, FileText, LogOut, Moon, Sun } from "lucide-react";
+import { useEffect, useState, ReactNode } from "react";
+import Logo from "@/components/Logo";
 
 const patientNav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -33,14 +33,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <div className="flex">
         {/* Sidebar */}
         <aside className="hidden md:flex w-64 min-h-screen flex-col border-r border-border/60 bg-card/50 backdrop-blur-xl px-4 py-6 sticky top-0">
-          <div className="flex items-center gap-2 px-2 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
-              <HeartPulse className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <div>
-              <div className="font-bold text-lg gradient-text">MediRecall</div>
-              <div className="text-xs text-muted-foreground capitalize">{profile?.role}</div>
-            </div>
+          <div className="px-2 mb-8">
+            <Logo size={40} textClassName="text-lg" />
+            <div className="text-xs text-muted-foreground capitalize mt-1 ml-[52px] -mt-1">{profile?.role}</div>
           </div>
 
           <nav className="flex-1 space-y-1">
@@ -79,12 +74,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
         {/* Mobile top bar */}
         <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-card/80 backdrop-blur-xl border-b border-border/60 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
-              <HeartPulse className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold gradient-text">MediRecall</span>
-          </div>
+          <Logo size={32} textClassName="text-base" />
           <Button variant="ghost" size="icon" onClick={() => setDark((d) => !d)}>
             {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </Button>

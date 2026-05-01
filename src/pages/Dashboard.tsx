@@ -237,7 +237,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-2">
               {todaysSchedule.map((s, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-secondary/50 hover-bounce">
+                <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-secondary/50 hover-glow hover-sheen animate-slide-in" style={{ animationDelay: `${i * 0.04}s` }}>
                   <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shrink-0">
                     <Pill className="w-5 h-5 text-primary-foreground" />
                   </div>
@@ -303,7 +303,7 @@ function StatCard({ icon: Icon, label, value, suffix, accent, delay = 0 }: { ico
     warning: "from-warning to-warning/70 text-warning-foreground",
   }[accent];
   return (
-    <div className="glass-card rounded-2xl p-5 hover-bounce animate-fade-up" style={{ animationDelay: `${delay}s` }}>
+    <div className="glass-card rounded-2xl p-5 hover-tilt hover-sheen animate-fade-up" style={{ animationDelay: `${delay}s` }}>
       <div className={`inline-flex w-10 h-10 rounded-xl bg-gradient-to-br ${styles} items-center justify-center mb-3 shadow-soft`}>
         <Icon className="w-5 h-5" />
       </div>
