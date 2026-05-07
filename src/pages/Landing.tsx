@@ -38,9 +38,7 @@ export default function Landing() {
 
       {/* Hero */}
       <section className="container py-16 md:py-28 text-center">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent-soft text-accent border border-accent/20 text-sm font-medium mb-6 animate-scale-in">
-          <Sparkles className="w-4 h-4" /> Your digital memory for health
-        </div>
+
         <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 animate-fade-up">
           Never forget a <span className="gradient-text">dose</span> again.
         </h1>

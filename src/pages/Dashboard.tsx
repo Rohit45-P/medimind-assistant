@@ -1,12 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Pill, Activity, Bell, Brain, Mic, Check, Volume2, Plus } from "lucide-react";
+import { Pill, Activity, Bell, Brain, Mic, Check, Volume2, Plus, HeartPulse } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
 import { speak, listen, requestNotificationPermission, showNotification } from "@/lib/voice";
 import { generateInsights, calculateHealthScore, MedLog, HealthLog } from "@/lib/insights";
 import { toast } from "sonner";
+import { Bar } from "react-chartjs-2";
+import { QRCodeSVG } from "qrcode.react";
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from "chart.js";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 interface Med {
   id: string;
@@ -22,6 +31,71 @@ export default function Dashboard() {
   const [health, setHealth] = useState<HealthLog[]>([]);
   const [now, setNow] = useState(new Date());
   const [listening, setListening] = useState(false);
+  const [animatingId, setAnimatingId] = useState<string | null>(null);
+  const [animType, setAnimType] = useState<"taken" | "missed" | null>(null);
+  const [alarmMed, setAlarmMed] = useState<{med: Med, time: string} | null>(null);
+
+  // Emergency Profile
+  const [showEmergency, setShowEmergency] = useState(false);
+  const [emBlood, setEmBlood] = useState(profile?.blood_group || "");
+  const [emAllergies, setEmAllergies] = useState(profile?.allergies || "");
+  const [emContacts, setEmContacts] = useState(profile?.emergency_contacts || "");
+  const [emDiseases, setEmDiseases] = useState(profile?.diseases || "");
+  const [savingEm, setSavingEm] = useState(false);
+
+  // Custom Voice Alarm
+  const [recording, setRecording] = useState(false);
+  const [audioURL, setAudioURL] = useState<string | null>(localStorage.getItem("customAlarm"));
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+
+  function handleRecordAlarm() {
+    if (recording) {
+      mediaRecorderRef.current?.stop();
+      setRecording(false);
+      toast.success("Custom alarm saved!");
+    } else {
+      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        const chunks: BlobPart[] = [];
+        mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(chunks, { type: "audio/webm" });
+          const reader = new FileReader();
+          reader.readAsDataURL(blob);
+          reader.onloadend = () => {
+            const base64data = reader.result as string;
+            localStorage.setItem("customAlarm", base64data);
+            setAudioURL(base64data);
+          };
+          stream.getTracks().forEach(t => t.stop());
+        };
+        mediaRecorder.start();
+        setRecording(true);
+        toast("Recording... Click again to stop.", { icon: "🎙️" });
+      }).catch(err => {
+        toast.error("Microphone access denied. Cannot record alarm.");
+      });
+    }
+  }
+
+  async function updateEmergencyProfile() {
+    if (!user) return;
+    setSavingEm(true);
+    const { error } = await supabase.from("profiles").update({
+      blood_group: emBlood,
+      allergies: emAllergies,
+      emergency_contacts: emContacts,
+      diseases: emDiseases
+    }).eq("id", user.id);
+    
+    setSavingEm(false);
+    if (error) {
+      toast.error("Failed to save emergency profile");
+    } else {
+      toast.success("Emergency profile updated!");
+    }
+  }
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30 * 1000);
@@ -59,8 +133,17 @@ export default function Dashboard() {
           if (diff === 0 && !checked.has(dueKey)) {
             checked.add(dueKey);
             showNotification("MediRecall — time for your dose", `${m.name}${m.dosage ? ` (${m.dosage})` : ""}`);
-            speak(`It's time to take your ${m.name}`);
+            
+            const customAlarm = localStorage.getItem("customAlarm");
+            if (customAlarm) {
+              const audio = new Audio(customAlarm);
+              audio.play().catch(() => speak(`It's time to take your ${m.name}`));
+            } else {
+              speak(`It's time to take your ${m.name}`);
+            }
+
             toast(`💊 Time for ${m.name}`, { description: m.dosage, duration: 10000 });
+            setAlarmMed({ med: m, time: t });
           }
           // Overdue escalation at 15 min
           const overKey = `over-${m.id}-${t}-${today}`;
@@ -89,14 +172,19 @@ export default function Dashboard() {
 
   async function load() {
     if (!user) return;
-    const [{ data: m }, { data: l }, { data: h }] = await Promise.all([
-      supabase.from("medications").select("*").eq("user_id", user.id).eq("active", true).order("created_at"),
-      supabase.from("medication_logs").select("*").eq("user_id", user.id).order("taken_at", { ascending: false }).limit(200),
-      supabase.from("health_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(100),
+    const [medsRes, logsRes, healthRes] = await Promise.all([
+      supabase.from("medications").select("*").eq("user_id", user.id),
+      supabase.from("medication_logs").select("*").eq("user_id", user.id).limit(200),
+      supabase.from("health_logs").select("*").eq("user_id", user.id).limit(100),
     ]);
-    setMeds((m || []) as Med[]);
-    setLogs((l || []) as MedLog[]);
-    setHealth((h || []) as HealthLog[]);
+
+    if (medsRes.error) toast.error("Error loading meds: " + medsRes.error.message);
+    if (logsRes.error) toast.error("Error loading history: " + logsRes.error.message);
+
+    const allMeds = (medsRes.data || []) as any[];
+    setMeds(allMeds.filter(med => med.active !== false) as Med[]);
+    setLogs((logsRes.data || []) as MedLog[]);
+    setHealth((healthRes.data || []) as HealthLog[]);
   }
 
   const today = now.toISOString().slice(0, 10);
@@ -112,18 +200,45 @@ export default function Dashboard() {
   const insights = useMemo(() => generateInsights(logs, health), [logs, health]);
   const score = useMemo(() => calculateHealthScore(logs), [logs]);
 
+  const adherenceData = useMemo(() => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 24 * 3600 * 1000);
+      days.push(d.toISOString().slice(0, 10));
+    }
+    const taken = days.map((d) => logs.filter((l) => l.scheduled_date === d && l.status === "taken").length);
+    const missed = days.map((d) => logs.filter((l) => l.scheduled_date === d && l.status === "missed").length);
+    return {
+      labels: days.map((d) => d.slice(5)),
+      datasets: [
+        { label: "Taken", data: taken, backgroundColor: "hsl(174 62% 42%)", borderRadius: 4 },
+        { label: "Missed", data: missed, backgroundColor: "hsl(0 78% 60%)", borderRadius: 4 },
+      ],
+    };
+  }, [logs]);
+
   async function logDose(med: Med, time: string, status: "taken" | "missed") {
     if (!user) return;
-    await supabase.from("medication_logs").insert({
-      user_id: user.id, medication_id: med.id, scheduled_time: time, scheduled_date: today, status,
-    });
+    
+    const key = `${med.id}-${time}`;
+    setAnimatingId(key);
+    setAnimType(status);
+
     if (status === "taken") {
       toast.success(`${med.name} logged ✓`);
       speak(`Good job. ${med.name} marked as taken.`);
     } else {
       toast(`${med.name} marked as missed`);
     }
-    load();
+
+    setTimeout(async () => {
+      await supabase.from("medication_logs").insert({
+        user_id: user.id, medication_id: med.id, scheduled_time: time, scheduled_date: today, status,
+      });
+      setAnimatingId(null);
+      setAnimType(null);
+      load();
+    }, 700);
   }
 
   async function logSymptom(value: string) {
@@ -135,23 +250,29 @@ export default function Dashboard() {
 
   function handleVoice() {
     setListening(true);
-    const session = listen((text) => {
-      const t = text.toLowerCase();
-      toast(`Heard: "${text}"`);
-      if (t.includes("took") || t.includes("taken")) {
-        const next = todaysSchedule.find((s) => !s.logged);
-        if (next) logDose(next.med, next.time, "taken");
-        else toast("Nothing scheduled to log right now");
-      } else if (t.includes("headache") || t.includes("pain") || t.includes("nausea") || t.includes("dizzy") || t.includes("tired")) {
-        const sym = ["headache","pain","nausea","dizziness","fatigue"].find(s => t.includes(s.slice(0,4))) || "symptom";
-        logSymptom(sym);
-      } else {
-        toast("Try: 'I took my medicine' or 'I have a headache'");
+    const session = listen(
+      (text) => {
+        const t = text.toLowerCase();
+        toast(`Heard: "${text}"`);
+        if (t.includes("took") || t.includes("taken")) {
+          const next = todaysSchedule.find((s) => !s.logged);
+          if (next) logDose(next.med, next.time, "taken");
+          else toast("Nothing scheduled to log right now");
+        } else if (t.includes("headache") || t.includes("pain") || t.includes("nausea") || t.includes("dizzy") || t.includes("tired")) {
+          const sym = ["headache","pain","nausea","dizziness","fatigue"].find(s => t.includes(s.slice(0,4))) || "symptom";
+          logSymptom(sym);
+        } else {
+          toast("Try: 'I took my medicine' or 'I have a headache'");
+        }
+      },
+      () => setListening(false),
+      (err) => {
+        setListening(false);
+        toast.error(err);
       }
-    }, () => setListening(false));
+    );
     if (!session) {
       setListening(false);
-      toast.error("Voice recognition not supported in this browser");
     }
   }
 
@@ -177,10 +298,30 @@ export default function Dashboard() {
           <h1 className="text-3xl md:text-4xl font-bold">Hello, {profile?.full_name?.split(" ")[0] || "friend"} 👋</h1>
           <p className="text-muted-foreground mt-1">Here's your health overview for today.</p>
         </div>
-        <Button onClick={handleVoice} disabled={listening} variant="outline" className="hover-bounce">
-          <Mic className={`w-4 h-4 mr-2 ${listening ? "text-destructive animate-pulse-soft" : ""}`} />
-          {listening ? "Listening…" : "Voice command"}
-        </Button>
+        
+        <div className="flex flex-wrap items-center gap-2">
+          <Button 
+            onClick={() => setShowEmergency(true)} 
+            variant="default" 
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 hover-bounce shadow-elegant"
+          >
+            <HeartPulse className="w-4 h-4 mr-2" /> My Emergency QR
+          </Button>
+          
+          {audioURL && !recording && (
+            <Button variant="ghost" size="sm" onClick={() => new Audio(audioURL).play()} className="text-muted-foreground hover:text-foreground">
+              <Volume2 className="w-4 h-4 mr-1" /> Play Alarm
+            </Button>
+          )}
+          <Button 
+            onClick={handleRecordAlarm} 
+            variant={recording ? "destructive" : "outline"} 
+            className={`hover-bounce ${recording ? "animate-pulse" : ""}`}
+          >
+            <Mic className={`w-4 h-4 mr-2 ${recording ? "animate-pulse-soft" : ""}`} />
+            {recording ? "Stop Recording" : (audioURL ? "Re-record Alarm" : "Record Voice Alarm")}
+          </Button>
+        </div>
       </div>
 
       {/* Stat row */}
@@ -193,7 +334,7 @@ export default function Dashboard() {
 
       {/* Hero next-dose */}
       {nextDose ? (
-        <div className={`relative overflow-hidden rounded-3xl bg-gradient-hero p-8 text-primary-foreground shadow-elegant animate-scale-in ${isOverdue ? "ring-4 ring-destructive/60 animate-pulse-soft" : ""}`}>
+        <div className={`relative overflow-hidden rounded-3xl bg-gradient-hero p-8 text-primary-foreground shadow-elegant animate-scale-in ${isOverdue ? "ring-4 ring-destructive/60 animate-pulse-soft" : ""} ${animatingId === `${nextDose.med.id}-${nextDose.time}` ? (animType === "taken" ? "animate-float-up" : "animate-fall-gravity") : ""}`}>
           <div className="absolute -right-8 -bottom-8 opacity-20 animate-float">
             <Pill className="w-48 h-48" />
           </div>
@@ -208,8 +349,8 @@ export default function Dashboard() {
               <Button onClick={() => logDose(nextDose.med, nextDose.time, "taken")} className="bg-card text-foreground hover:bg-card/90 hover-bounce">
                 <Check className="w-4 h-4 mr-2" /> Mark as taken
               </Button>
-              <Button onClick={() => speak(`It's time to take your ${nextDose.med.name}`)} variant="ghost" className="text-primary-foreground hover:bg-white/10">
-                <Volume2 className="w-4 h-4 mr-2" /> Voice reminder
+              <Button onClick={() => logDose(nextDose.med, nextDose.time, "missed")} variant="ghost" className="text-primary-foreground hover:bg-white/20">
+                Skip
               </Button>
             </div>
           </div>
@@ -236,8 +377,12 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="space-y-2">
-              {todaysSchedule.map((s, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-secondary/50 hover-glow hover-sheen animate-slide-in" style={{ animationDelay: `${i * 0.04}s` }}>
+              {todaysSchedule.map((s, i) => {
+                const isAnimating = animatingId === `${s.med.id}-${s.time}`;
+                const animClass = isAnimating ? (animType === "taken" ? "animate-float-up" : "animate-fall-gravity") : "";
+                
+                return (
+                <div key={i} className={`flex items-center gap-3 p-3 rounded-xl bg-secondary/50 hover-glow hover-sheen animate-slide-in ${animClass}`} style={{ animationDelay: isAnimating ? '0s' : `${i * 0.04}s` }}>
                   <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shrink-0">
                     <Pill className="w-5 h-5 text-primary-foreground" />
                   </div>
@@ -251,20 +396,32 @@ export default function Dashboard() {
                     </span>
                   ) : (
                     <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => logDose(s.med, s.time, "missed")} className="text-muted-foreground">Skip</Button>
+                      <Button size="sm" variant="ghost" onClick={() => logDose(s.med, s.time, "missed")} className="text-muted-foreground hover:text-destructive">Skip</Button>
                       <Button size="sm" onClick={() => logDose(s.med, s.time, "taken")} className="bg-gradient-primary text-primary-foreground hover-bounce">
                         <Check className="w-4 h-4" />
                       </Button>
                     </div>
                   )}
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </div>
 
-        <div className="glass-card rounded-2xl p-6">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2"><Brain className="w-5 h-5 text-accent" /> Insights</h2>
+        <div className="space-y-6">
+          {/* Adherence Chart */}
+          <div className="glass-card rounded-2xl p-6">
+            <h2 className="text-lg font-semibold mb-3">7-Day Adherence</h2>
+            <div className="h-40">
+              <Bar 
+                data={adherenceData} 
+                options={{ maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { grid: { display: false } } } }} 
+              />
+            </div>
+          </div>
+          
+          <div className="glass-card rounded-2xl p-6">
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2"><Brain className="w-5 h-5 text-accent" /> Insights</h2>
           <div className="space-y-3">
             {insights.slice(0, 4).map((i) => (
               <div key={i.id} className={`p-4 rounded-xl border-l-4 ${
@@ -280,17 +437,146 @@ export default function Dashboard() {
           <Link to="/insights"><Button variant="ghost" size="sm" className="w-full mt-4 hover-bounce">View all insights →</Button></Link>
         </div>
       </div>
+      </div>
 
-      {/* Quick symptom log */}
-      <div className="glass-card rounded-2xl p-6">
-        <h2 className="text-xl font-semibold mb-3">Quick log</h2>
-        <p className="text-sm text-muted-foreground mb-4">Tap a symptom or mood to log it instantly.</p>
-        <div className="flex flex-wrap gap-2">
-          {["Headache","Nausea","Fatigue","Dizziness","Pain","Happy","Anxious","Calm"].map((s) => (
-            <Button key={s} variant="outline" size="sm" onClick={() => logSymptom(s)} className="hover-bounce">{s}</Button>
-          ))}
+      {/* Quick symptom log & Recent History */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        <div className="glass-card rounded-2xl p-6">
+          <h2 className="text-xl font-semibold mb-3">Quick log</h2>
+          <p className="text-sm text-muted-foreground mb-4">Tap a symptom or mood to log it instantly.</p>
+          <div className="flex flex-wrap gap-2">
+            {["Headache","Nausea","Fatigue","Dizziness","Pain","Happy","Anxious","Calm"].map((s) => (
+              <Button key={s} variant="outline" size="sm" onClick={() => logSymptom(s)} className="hover-bounce">{s}</Button>
+            ))}
+          </div>
+        </div>
+        
+        <div className="glass-card rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xl font-semibold">Medicine History</h2>
+            <Link to="/medications" className="text-xs text-primary hover:underline">View all</Link>
+          </div>
+          <div className="space-y-2">
+            {logs.slice(0, 4).map((l, i) => {
+              const med = meds.find(m => m.id === l.medication_id);
+              return (
+                <div key={i} className="flex justify-between items-center text-sm p-2 rounded bg-secondary/30">
+                  <div>
+                    <span className="font-medium">{med?.name || "Unknown"}</span>
+                    <span className="text-xs text-muted-foreground ml-2">{l.scheduled_time}</span>
+                  </div>
+                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${l.status === 'taken' ? 'bg-success/20 text-success' : 'bg-destructive/20 text-destructive'}`}>
+                    {l.status}
+                  </span>
+                </div>
+              );
+            })}
+            {logs.length === 0 && <p className="text-xs text-muted-foreground py-2">No history recorded yet.</p>}
+          </div>
         </div>
       </div>
+
+      {/* Alarm Popup */}
+      <Dialog open={!!alarmMed} onOpenChange={(o) => { if (!o) setAlarmMed(null); }}>
+        <DialogContent className="sm:max-w-md text-center p-8 glass-card border-primary/30 shadow-glow">
+          <div className="w-20 h-20 bg-gradient-primary rounded-full flex items-center justify-center mx-auto mb-6 shadow-elegant animate-pulse-soft">
+            <Bell className="w-10 h-10 text-primary-foreground animate-bounce" />
+          </div>
+          <DialogHeader>
+            <DialogTitle className="text-3xl font-bold text-center">Time for {alarmMed?.med.name}</DialogTitle>
+            {alarmMed?.med.dosage && (
+              <DialogDescription className="text-center text-lg mt-2">
+                Dosage: {alarmMed.med.dosage}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          <div className="flex flex-col gap-3 mt-8">
+            <Button 
+              size="lg" 
+              className="w-full bg-gradient-primary text-primary-foreground hover-bounce text-lg h-14 shadow-elegant"
+              onClick={() => {
+                if (alarmMed?.med.id !== "test") logDose(alarmMed!.med, alarmMed!.time, "taken");
+                setAlarmMed(null);
+              }}
+            >
+              <Check className="w-6 h-6 mr-2" /> Mark as Taken
+            </Button>
+            <Button 
+              size="lg" 
+              variant="outline" 
+              className="w-full hover-bounce h-14 text-muted-foreground border-border/60"
+              onClick={() => {
+                if (alarmMed?.med.id !== "test") logDose(alarmMed!.med, alarmMed!.time, "missed");
+                setAlarmMed(null);
+              }}
+            >
+              Skip Dose
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Emergency Profile Modal */}
+      <Dialog open={showEmergency} onOpenChange={setShowEmergency}>
+        <DialogContent className="sm:max-w-2xl bg-card border-border shadow-elegant max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+              <HeartPulse className="w-6 h-6 text-destructive" /> Medical Emergency Profile
+            </DialogTitle>
+            <DialogDescription>
+              This information is publicly accessible when first responders scan your QR code.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid md:grid-cols-2 gap-8 mt-4">
+            <div className="space-y-4">
+              <div>
+                <Label>Blood Group</Label>
+                <Input value={emBlood} onChange={(e) => setEmBlood(e.target.value)} placeholder="e.g. O Positive" />
+              </div>
+              <div>
+                <Label>Allergies</Label>
+                <Textarea value={emAllergies} onChange={(e) => setEmAllergies(e.target.value)} placeholder="e.g. Penicillin, Peanuts..." />
+              </div>
+              <div>
+                <Label>Conditions & Diseases</Label>
+                <Textarea value={emDiseases} onChange={(e) => setEmDiseases(e.target.value)} placeholder="e.g. Type 2 Diabetes, Hypertension..." />
+              </div>
+              <div>
+                <Label>Emergency Contacts</Label>
+                <Textarea value={emContacts} onChange={(e) => setEmContacts(e.target.value)} placeholder="e.g. Wife (Jane): +1-555-0192" />
+              </div>
+              <Button onClick={updateEmergencyProfile} disabled={savingEm} className="w-full bg-gradient-primary hover-bounce">
+                {savingEm ? "Saving..." : "Save Emergency Data"}
+              </Button>
+            </div>
+
+            <div className="flex flex-col items-center justify-center p-6 bg-accent-soft/30 rounded-2xl border border-border text-center">
+              <div className="bg-white p-4 rounded-xl shadow-md mb-4">
+                <QRCodeSVG 
+                  value={`${window.location.origin}/emergency/${user?.id}`} 
+                  size={200}
+                  level="H"
+                  fgColor="#b91c1c"
+                />
+              </div>
+              <h3 className="font-bold text-lg text-destructive">Emergency Scan</h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                Keep this code on your lock screen or in your wallet. First responders can scan it to instantly access your life-saving medical data.
+              </p>
+              <Button 
+                variant="outline" 
+                className="mt-4 w-full"
+                onClick={() => {
+                  window.open(`/emergency/${user?.id}`, '_blank');
+                }}
+              >
+                Preview Public Page
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

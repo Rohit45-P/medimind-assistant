@@ -50,17 +50,19 @@ export default function Auth() {
 
   async function handleGoogle() {
     setLoading(true);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/dashboard`,
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/dashboard`,
+      }
     });
-    if (result.error) {
+    
+    if (error) {
       setLoading(false);
-      toast.error(result.error.message || "Google sign-in failed");
-      return;
+      toast.error(error.message || "Google sign-in failed");
     }
-    if (result.redirected) return;
-    toast.success("Signed in with Google");
-    navigate("/dashboard");
+    // Note: On success, Supabase will automatically redirect to Google,
+    // and then back to the redirectTo URL, so we don't need to call navigate() here.
   }
 
   async function handleSignIn(e: React.FormEvent) {

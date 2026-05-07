@@ -14,6 +14,7 @@ import Timeline from "./pages/Timeline";
 import Insights from "./pages/Insights";
 import Summary from "./pages/Summary";
 import Caregiver from "./pages/Caregiver";
+import Emergency from "./pages/Emergency";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 
@@ -45,6 +46,7 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/app" element={<RoleRedirect />} />
+            <Route path="/emergency/:id" element={<Emergency />} />
 
             <Route path="/dashboard" element={<ProtectedRoute role="patient"><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
             <Route path="/medications" element={<ProtectedRoute role="patient"><AppLayout><Medications /></AppLayout></ProtectedRoute>} />

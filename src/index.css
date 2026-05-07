@@ -58,8 +58,8 @@
 
     /* Shadows */
     --shadow-soft: 0 4px 20px -4px hsl(200 40% 30% / 0.08);
-    --shadow-elegant: 0 10px 40px -10px hsl(174 62% 42% / 0.25);
-    --shadow-glow: 0 0 50px hsl(168 76% 56% / 0.35);
+    --shadow-elegant: 0 12px 40px -8px hsl(174 62% 42% / 0.45);
+    --shadow-glow: 0 0 50px hsl(168 76% 56% / 0.45);
     --shadow-card: 0 2px 12px -2px hsl(200 40% 30% / 0.06);
 
     /* Transitions */
@@ -157,10 +157,10 @@
     background-image: var(--gradient-primary);
   }
   .hover-bounce {
-    transition: var(--transition-bounce);
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
   }
   .hover-bounce:hover {
-    transform: translateY(-4px) scale(1.02);
+    transform: translateY(-6px) scale(1.03);
     box-shadow: var(--shadow-elegant);
   }
   /* Premium hover: subtle lift + glow ring + border tint */
@@ -180,11 +180,11 @@
     filter: blur(12px);
   }
   .hover-glow:hover {
-    transform: translateY(-3px);
+    transform: translateY(-4px);
     box-shadow: var(--shadow-elegant);
-    border-color: hsl(var(--primary) / 0.5);
+    border-color: hsl(var(--primary) / 0.7);
   }
-  .hover-glow:hover::before { opacity: 0.45; }
+  .hover-glow:hover::before { opacity: 0.65; }
 
   /* Tilt-on-hover for cards */
   .hover-tilt {
@@ -207,9 +207,9 @@
     left: -75%;
     width: 50%;
     height: 100%;
-    background: linear-gradient(120deg, transparent, hsl(0 0% 100% / 0.25), transparent);
+    background: linear-gradient(120deg, transparent, hsl(var(--primary) / 0.15), transparent);
     transform: skewX(-20deg);
-    transition: left 0.7s ease;
+    transition: left 0.7s cubic-bezier(0.4, 0, 0.2, 1);
     pointer-events: none;
   }
   .hover-sheen:hover::after { left: 125%; }
@@ -240,6 +240,12 @@
   .animate-slide-in {
     animation: slideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
   }
+  .animate-fall-gravity {
+    animation: fallGravity 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+  .animate-float-up {
+    animation: floatUp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
 }
 
 @keyframes float {
@@ -265,4 +271,14 @@
 @keyframes slideIn {
   from { opacity: 0; transform: translateX(-20px); }
   to { opacity: 1; transform: translateX(0); }
+}
+@keyframes fallGravity {
+  0% { opacity: 1; transform: translateY(0) rotate(0deg); }
+  20% { opacity: 1; transform: translateY(-10px) rotate(-2deg); }
+  100% { opacity: 0; transform: translateY(100px) rotate(10deg); pointer-events: none; }
+}
+@keyframes floatUp {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  50% { opacity: 0.8; transform: translateY(-30px) scale(1.05); }
+  100% { opacity: 0; transform: translateY(-80px) scale(0.8); pointer-events: none; }
 }

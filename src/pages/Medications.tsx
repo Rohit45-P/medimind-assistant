@@ -58,12 +58,16 @@ export default function Medications() {
   async function load() {
     if (!user) return;
     const since = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
-    const [{ data: m }, { data: l }] = await Promise.all([
-      supabase.from("medications").select("*").eq("user_id", user.id).order("created_at"),
-      supabase.from("medication_logs").select("*").eq("user_id", user.id).gte("taken_at", since).order("taken_at", { ascending: false }),
+    const [medsRes, logsRes] = await Promise.all([
+      supabase.from("medications").select("*").eq("user_id", user.id),
+      supabase.from("medication_logs").select("*").eq("user_id", user.id).gte("scheduled_date", since.slice(0,10))
     ]);
-    setMeds((m || []) as Med[]);
-    setLogs((l || []) as MedLog[]);
+    
+    if (medsRes.error) toast.error("Error loading meds: " + medsRes.error.message);
+    if (logsRes.error) toast.error("Error loading history: " + logsRes.error.message);
+
+    setMeds((medsRes.data || []) as Med[]);
+    setLogs((logsRes.data || []) as MedLog[]);
   }
 
   function reset() {

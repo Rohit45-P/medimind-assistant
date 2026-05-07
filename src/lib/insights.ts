@@ -67,13 +67,13 @@ export function generateInsights(logs: MedLog[], health: HealthLog[]): Insight[]
     });
   }
 
-  // 3. Weekly miss pattern
+  // 3. Weekly miss pattern - Emergency Alert
   if (missed.length >= 3) {
     insights.push({
       id: "missed-week",
-      severity: "warning",
-      title: `${missed.length} missed doses this week`,
-      description: "Consider adjusting your reminder times or asking your caregiver for support.",
+      severity: "alert",
+      title: "🚨 Emergency Alert",
+      description: "3 doses missed. Notifying family member.",
     });
   }
 
@@ -94,9 +94,9 @@ export function generateInsights(logs: MedLog[], health: HealthLog[]): Insight[]
   if (worstTod && worstTod.rate >= 0.4) {
     insights.push({
       id: "missed-tod",
-      severity: "alert",
-      title: `${worstTod.k.charAt(0).toUpperCase()+worstTod.k.slice(1)} doses are at risk`,
-      description: `${Math.round(worstTod.rate*100)}% of ${worstTod.k} doses missed. Try an earlier reminder or pair the dose with a daily routine.`,
+      severity: "warning",
+      title: "AI Suggestion",
+      description: `You often miss ${worstTod.k} dose. Try an earlier reminder or pair the dose with a daily routine.`,
     });
   }
 

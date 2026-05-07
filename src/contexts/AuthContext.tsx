@@ -8,6 +8,10 @@ interface Profile {
   id: string;
   full_name: string;
   role: Role;
+  blood_group?: string;
+  allergies?: string;
+  emergency_contacts?: string;
+  diseases?: string;
 }
 
 interface AuthCtx {
@@ -50,7 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function fetchProfile(uid: string) {
-    const { data } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
+    const { data, error } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
+    if (error) console.error("Profile fetch error:", error);
     if (data) setProfile(data as Profile);
   }
 
