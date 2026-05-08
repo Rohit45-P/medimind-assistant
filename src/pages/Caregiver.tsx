@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,50 +28,33 @@ export default function Caregiver() {
 
   async function load() {
     if (!user) return;
-    const { data: links } = await supabase.from("caregiver_links").select("patient_id").eq("caregiver_id", user.id);
-    const ids = (links || []).map((l: any) => l.patient_id);
-    if (ids.length === 0) { setPatients([]); return; }
-
-    const [{ data: profs }, { data: meds }, { data: logs }, { data: health }] = await Promise.all([
-      supabase.from("profiles").select("id, full_name").in("id", ids),
-      supabase.from("medications").select("*").in("user_id", ids),
-      supabase.from("medication_logs").select("*").in("user_id", ids),
-      supabase.from("health_logs").select("*").in("user_id", ids),
-    ]);
-
-    const list: Patient[] = (profs || []).map((p: any) => ({
-      id: p.id,
-      full_name: p.full_name || "Patient",
-      meds: (meds || []).filter((m: any) => m.user_id === p.id),
-      logs: (logs || []).filter((l: any) => l.user_id === p.id),
-      health: (health || []).filter((h: any) => h.user_id === p.id),
-    }));
-    setPatients(list);
+    try {
+      const data = await apiFetch("/api/caregiver/patients");
+      setPatients(data || []);
+    } catch {
+      setPatients([]);
+    }
   }
 
   async function linkPatient() {
     if (!user) return;
     if (!email.trim()) return toast.error("Email required");
     setLoading(true);
-    const { data: pid, error } = await supabase.rpc("find_user_id_by_email", { _email: email.trim().toLowerCase() });
-    if (error || !pid) {
-      setLoading(false);
-      return toast.error("No patient found with that email");
+    try {
+      await apiFetch("/api/caregiver/link", {
+        method: "POST",
+        body: JSON.stringify({ patient_email: email.trim().toLowerCase() }),
+      });
+      toast.success("Patient linked");
+      setOpen(false); setEmail(""); load();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to link patient");
     }
-    if (pid === user.id) {
-      setLoading(false);
-      return toast.error("That's your own account");
-    }
-    const { error: linkErr } = await supabase.from("caregiver_links").insert({ caregiver_id: user.id, patient_id: pid });
     setLoading(false);
-    if (linkErr) return toast.error(linkErr.code === "23505" ? "Already linked" : linkErr.message);
-    toast.success("Patient linked");
-    setOpen(false); setEmail(""); load();
   }
 
   async function unlink(patientId: string) {
-    if (!user) return;
-    await supabase.from("caregiver_links").delete().eq("caregiver_id", user.id).eq("patient_id", patientId);
+    await apiFetch(`/api/caregiver/unlink/${patientId}`, { method: "DELETE" });
     toast("Patient unlinked"); load();
   }
 

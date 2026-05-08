@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,17 +58,17 @@ export default function Medications() {
 
   async function load() {
     if (!user) return;
-    const since = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
-    const [medsRes, logsRes] = await Promise.all([
-      supabase.from("medications").select("*").eq("user_id", user.id),
-      supabase.from("medication_logs").select("*").eq("user_id", user.id).gte("scheduled_date", since.slice(0,10))
-    ]);
-    
-    if (medsRes.error) toast.error("Error loading meds: " + medsRes.error.message);
-    if (logsRes.error) toast.error("Error loading history: " + logsRes.error.message);
-
-    setMeds((medsRes.data || []) as Med[]);
-    setLogs((logsRes.data || []) as MedLog[]);
+    const since = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    try {
+      const [medsData, logsData] = await Promise.all([
+        apiFetch("/api/medications"),
+        apiFetch(`/api/medications/logs?since=${since}`),
+      ]);
+      setMeds((medsData || []) as Med[]);
+      setLogs((logsData || []) as MedLog[]);
+    } catch (err: any) {
+      toast.error("Error loading data: " + err.message);
+    }
   }
 
   function reset() {
@@ -75,23 +76,25 @@ export default function Medications() {
   }
 
   async function save() {
-    if (!user) return;
     if (!name.trim()) return toast.error("Medication name is required");
     if (times.length === 0) return toast.error("Add at least one reminder time");
-    const { error } = await supabase.from("medications").insert({
-      user_id: user.id,
-      name: name.trim(),
-      dosage: dosage.trim(),
-      times,
-      notes: notes.trim(),
-    });
-    if (error) return toast.error(error.message);
-    toast.success("Medication added");
-    setOpen(false); reset(); load();
+    try {
+      await apiFetch("/api/medications", {
+        method: "POST",
+        body: JSON.stringify({ medicine_name: name.trim(), dosage: dosage.trim(), timing: times, notes: notes.trim() }),
+      });
+      toast.success("Medication added");
+      setOpen(false); reset(); load();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
   }
 
   async function remove(id: string) {
-    await supabase.from("medications").update({ active: false }).eq("id", id);
+    await apiFetch(`/api/medications/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ active: false }),
+    });
     toast("Medication archived (history kept)");
     load();
   }

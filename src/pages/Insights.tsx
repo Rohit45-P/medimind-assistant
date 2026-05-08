@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api";
 import { generateInsights } from "@/lib/insights";
 import { AlertTriangle, Info, Bell } from "lucide-react";
 
@@ -13,11 +13,11 @@ export default function Insights() {
 
   async function load() {
     if (!user) return;
-    const [{ data: l }, { data: h }] = await Promise.all([
-      supabase.from("medication_logs").select("*").eq("user_id", user.id),
-      supabase.from("health_logs").select("*").eq("user_id", user.id),
+    const [logsData, healthData] = await Promise.all([
+      apiFetch("/api/medications/logs"),
+      apiFetch("/api/health-logs"),
     ]);
-    setLogs(l || []); setHealth(h || []);
+    setLogs(logsData || []); setHealth(healthData || []);
   }
 
   const insights = useMemo(() => generateInsights(logs as any, health as any), [logs, health]);

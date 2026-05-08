@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api";
 import { Line, Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
@@ -18,12 +18,12 @@ export default function Timeline() {
 
   async function load() {
     if (!user) return;
-    const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
-    const [{ data: l }, { data: h }] = await Promise.all([
-      supabase.from("medication_logs").select("*").eq("user_id", user.id).gte("taken_at", since).order("taken_at"),
-      supabase.from("health_logs").select("*").eq("user_id", user.id).gte("created_at", since).order("created_at"),
+    const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const [logsData, healthData] = await Promise.all([
+      apiFetch(`/api/medications/logs?since=${since}`),
+      apiFetch(`/api/health-logs?since=${since}&limit=200`),
     ]);
-    setLogs(l || []); setHealth(h || []);
+    setLogs(logsData || []); setHealth(healthData || []);
   }
 
   const days = useMemo(() => {

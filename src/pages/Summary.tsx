@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Download, FileText } from "lucide-react";
 import jsPDF from "jspdf";
@@ -18,13 +18,13 @@ export default function Summary() {
 
   async function load() {
     if (!user) return;
-    const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-    const [{ data: m }, { data: l }, { data: h }] = await Promise.all([
-      supabase.from("medications").select("*").eq("user_id", user.id),
-      supabase.from("medication_logs").select("*").eq("user_id", user.id).gte("taken_at", since),
-      supabase.from("health_logs").select("*").eq("user_id", user.id).gte("created_at", since),
+    const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const [medsData, logsData, healthData] = await Promise.all([
+      apiFetch("/api/medications"),
+      apiFetch(`/api/medications/logs?since=${since}`),
+      apiFetch(`/api/health-logs?since=${since}&limit=200`),
     ]);
-    setMeds(m || []); setLogs(l || []); setHealth(h || []);
+    setMeds(medsData || []); setLogs(logsData || []); setHealth(healthData || []);
   }
 
   const taken = logs.filter((l) => l.status === "taken").length;

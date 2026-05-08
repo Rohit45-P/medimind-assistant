@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api";
 import { Pill, Activity, Bell, Brain, Mic, Check, Volume2, Plus, HeartPulse } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -80,21 +81,22 @@ export default function Dashboard() {
   }
 
   async function updateEmergencyProfile() {
-    if (!user) return;
     setSavingEm(true);
-    const { error } = await supabase.from("profiles").update({
-      blood_group: emBlood,
-      allergies: emAllergies,
-      emergency_contacts: emContacts,
-      diseases: emDiseases
-    }).eq("id", user.id);
-    
-    setSavingEm(false);
-    if (error) {
-      toast.error("Failed to save emergency profile");
-    } else {
+    try {
+      await apiFetch("/api/patients/emergency-profile", {
+        method: "PUT",
+        body: JSON.stringify({
+          blood_group: emBlood,
+          allergies: emAllergies,
+          emergency_contacts: emContacts,
+          diseases: emDiseases,
+        }),
+      });
       toast.success("Emergency profile updated!");
+    } catch {
+      toast.error("Failed to save emergency profile");
     }
+    setSavingEm(false);
   }
 
   useEffect(() => {
@@ -172,19 +174,18 @@ export default function Dashboard() {
 
   async function load() {
     if (!user) return;
-    const [medsRes, logsRes, healthRes] = await Promise.all([
-      supabase.from("medications").select("*").eq("user_id", user.id),
-      supabase.from("medication_logs").select("*").eq("user_id", user.id).limit(200),
-      supabase.from("health_logs").select("*").eq("user_id", user.id).limit(100),
-    ]);
-
-    if (medsRes.error) toast.error("Error loading meds: " + medsRes.error.message);
-    if (logsRes.error) toast.error("Error loading history: " + logsRes.error.message);
-
-    const allMeds = (medsRes.data || []) as any[];
-    setMeds(allMeds.filter(med => med.active !== false) as Med[]);
-    setLogs((logsRes.data || []) as MedLog[]);
-    setHealth((healthRes.data || []) as HealthLog[]);
+    try {
+      const [allMedsData, allLogsData, allHealthData] = await Promise.all([
+        apiFetch("/api/medications"),
+        apiFetch("/api/medications/logs?limit=200"),
+        apiFetch("/api/health-logs?limit=100"),
+      ]);
+      setMeds(((allMedsData || []) as any[]).filter((m: any) => m.active !== false) as Med[]);
+      setLogs((allLogsData || []) as MedLog[]);
+      setHealth((allHealthData || []) as HealthLog[]);
+    } catch (err: any) {
+      toast.error("Error loading data: " + err.message);
+    }
   }
 
   const today = now.toISOString().slice(0, 10);
@@ -232,8 +233,9 @@ export default function Dashboard() {
     }
 
     setTimeout(async () => {
-      await supabase.from("medication_logs").insert({
-        user_id: user.id, medication_id: med.id, scheduled_time: time, scheduled_date: today, status,
+      await apiFetch("/api/medications/log", {
+        method: "POST",
+        body: JSON.stringify({ medication_id: med.id, scheduled_time: time, scheduled_date: today, status }),
       });
       setAnimatingId(null);
       setAnimType(null);
@@ -243,7 +245,10 @@ export default function Dashboard() {
 
   async function logSymptom(value: string) {
     if (!user) return;
-    await supabase.from("health_logs").insert({ user_id: user.id, type: "symptom", value });
+    await apiFetch("/api/patients/health-log", {
+      method: "POST",
+      body: JSON.stringify({ type: "symptom", value }),
+    });
     toast.success(`Logged: ${value}`);
     load();
   }

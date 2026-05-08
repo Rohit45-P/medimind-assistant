@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
 
-# Import routes
 from app.routes import auth, medicines, patients, caregiver, analytics
+from app.routes import health_logs, public
 
 load_dotenv()
 
@@ -14,10 +14,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Setup CORS
 origins = [
     os.getenv("FRONTEND_URL", "http://localhost:3000"),
-    "http://localhost:8080",  # Adding Vite's default dev server port if different
+    "http://localhost:8080",
+    "http://localhost:5173",
 ]
 
 app.add_middleware(
@@ -28,12 +28,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include Routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
-app.include_router(medicines.router, prefix="/api/medicines", tags=["Medicines"])
+app.include_router(medicines.router, prefix="/api/medications", tags=["Medications"])
 app.include_router(patients.router, prefix="/api/patients", tags=["Patients"])
 app.include_router(caregiver.router, prefix="/api/caregiver", tags=["Caregiver"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
+app.include_router(health_logs.router, prefix="/api/health-logs", tags=["Health Logs"])
+app.include_router(public.router, prefix="/api/public", tags=["Public"])
 
 @app.get("/")
 def read_root():

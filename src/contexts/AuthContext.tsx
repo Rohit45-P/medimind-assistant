@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api";
 
 type Role = "patient" | "caregiver";
 
@@ -54,9 +55,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function fetchProfile(uid: string) {
-    const { data, error } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
-    if (error) console.error("Profile fetch error:", error);
-    if (data) setProfile(data as Profile);
+    try {
+      const data = await apiFetch("/api/auth/me");
+      if (data) setProfile(data as Profile);
+    } catch (err) {
+      console.error("Profile fetch error:", err);
+    }
   }
 
   const signUp = async (email: string, password: string, fullName: string, role: Role) => {

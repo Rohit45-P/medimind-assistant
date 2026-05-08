@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from "@/lib/api";
 import { HeartPulse, Droplet, AlertTriangle, Phone, Stethoscope, Pill, Loader2, Info } from "lucide-react";
 import Logo from "@/components/Logo";
 
@@ -30,33 +30,15 @@ export default function Emergency() {
     async function fetchEmergencyData() {
       if (!id) return;
       try {
-        // Fetch profile
-        const { data: profData, error: profError } = await supabase
-          .from("profiles")
-          .select("id, full_name, blood_group, allergies, emergency_contacts, diseases")
-          .eq("id", id)
-          .single();
-
-        if (profError) throw new Error("Could not find emergency profile.");
-        setProfile(profData as EmergencyProfile);
-
-        // Fetch active medications
-        const { data: medData, error: medError } = await supabase
-          .from("medications")
-          .select("id, name, dosage")
-          .eq("user_id", id)
-          .eq("active", true);
-
-        if (!medError && medData) {
-          setMeds(medData);
-        }
+        const data = await apiFetch(`/api/public/emergency/${id}`);
+        setProfile(data.profile as EmergencyProfile);
+        setMeds(data.medications || []);
       } catch (err: any) {
         setError(err.message || "Failed to load patient data.");
       } finally {
         setLoading(false);
       }
     }
-
     fetchEmergencyData();
   }, [id]);
 
