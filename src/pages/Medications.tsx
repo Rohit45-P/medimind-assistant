@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Pill, Trash2, Clock, X, History, Check, AlertCircle, Calendar, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
+import { VoiceInputButton } from "@/components/VoiceInputButton";
 
 interface Med {
   id: string;
@@ -147,7 +148,10 @@ export default function Medications() {
             <DialogHeader><DialogTitle>New medication</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label>Name *</Label>
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Name *</Label>
+                  <VoiceInputButton onResult={setName} placeholder="Speak medication name" />
+                </div>
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lisinopril" maxLength={100} />
               </div>
               <div>
@@ -175,7 +179,10 @@ export default function Medications() {
                 </div>
               </div>
               <div>
-                <Label>Notes</Label>
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Notes</Label>
+                  <VoiceInputButton onResult={setNotes} placeholder="Speak notes" />
+                </div>
                 <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Take with food" maxLength={300} />
               </div>
               <Button onClick={save} className="w-full bg-gradient-primary text-primary-foreground hover-bounce">Save medication</Button>

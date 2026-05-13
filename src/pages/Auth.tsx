@@ -36,6 +36,7 @@ export default function Auth() {
 
   const [siEmail, setSiEmail] = useState("");
   const [siPwd, setSiPwd] = useState("");
+  const [siRole, setSiRole] = useState<"patient" | "caregiver">("patient");
 
   const [suEmail, setSuEmail] = useState("");
   const [suPwd, setSuPwd] = useState("");
@@ -75,13 +76,14 @@ export default function Auth() {
       return;
     }
     setLoading(true);
-    const { error } = await signIn(siEmail, siPwd);
+    const { data, error } = await signIn(siEmail, siPwd);
     setLoading(false);
     if (error) {
       toast.error(error.message.includes("Invalid") ? "Incorrect email or password" : error.message);
     } else {
       toast.success("Welcome back!");
-      navigate("/dashboard");
+      const role = data?.user?.user_metadata?.role || siRole;
+      navigate(role === "caregiver" ? "/caregiver" : "/dashboard");
     }
   }
 
@@ -208,6 +210,19 @@ export default function Auth() {
                 <div>
                   <Label htmlFor="si-pwd">Password</Label>
                   <Input id="si-pwd" type="password" autoComplete="current-password" value={siPwd} onChange={(e) => setSiPwd(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="mb-2 block">Sign in as a…</Label>
+                  <RadioGroup value={siRole} onValueChange={(v) => setSiRole(v as any)} className="grid grid-cols-2 gap-3">
+                    <label className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all hover-bounce ${siRole === "patient" ? "border-primary bg-primary/5" : "border-border"}`}>
+                      <RadioGroupItem value="patient" className="sr-only" />
+                      <User className="w-4 h-4" /> <span className="text-sm font-medium">Patient</span>
+                    </label>
+                    <label className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all hover-bounce ${siRole === "caregiver" ? "border-primary bg-primary/5" : "border-border"}`}>
+                      <RadioGroupItem value="caregiver" className="sr-only" />
+                      <Users className="w-4 h-4" /> <span className="text-sm font-medium">Caregiver</span>
+                    </label>
+                  </RadioGroup>
                 </div>
                 <Button type="submit" disabled={loading} className="w-full bg-gradient-primary text-primary-foreground hover-bounce shadow-elegant h-11">
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Sign in"}
