@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { apiFetch } from "@/lib/api";
 import { HeartPulse, Droplet, AlertTriangle, Phone, Stethoscope, Pill, Loader2, Info } from "lucide-react";
 import Logo from "@/components/Logo";
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 interface EmergencyProfile {
   id: string;
@@ -30,7 +31,12 @@ export default function Emergency() {
     async function fetchEmergencyData() {
       if (!id) return;
       try {
-        const data = await apiFetch(`/api/public/emergency/${id}`);
+        const res = await fetch(`${API_BASE}/api/public/emergency/${id}`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }));
+          throw new Error(err.detail || `API error ${res.status}`);
+        }
+        const data = await res.json();
         setProfile(data.profile as EmergencyProfile);
         setMeds(data.medications || []);
       } catch (err: any) {

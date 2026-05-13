@@ -282,3 +282,20 @@
   50% { opacity: 0.8; transform: translateY(-30px) scale(1.05); }
   100% { opacity: 0; transform: translateY(-80px) scale(0.8); pointer-events: none; }
 }
+@keyframes vibrateScreen {
+  0% { transform: translate(0); }
+  10% { transform: translate(-3px, 3px); }
+  20% { transform: translate(-3px, -3px); }
+  30% { transform: translate(3px, 3px); }
+  40% { transform: translate(3px, -3px); }
+  50% { transform: translate(-3px, 3px); }
+  60% { transform: translate(-3px, -3px); }
+  70% { transform: translate(3px, 3px); }
+  80% { transform: translate(3px, -3px); }
+  90% { transform: translate(-3px, 3px); }
+  100% { transform: translate(0); }
+}
+
+.animate-vibrate-screen {
+  animation: vibrateScreen 0.15s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite;
+}

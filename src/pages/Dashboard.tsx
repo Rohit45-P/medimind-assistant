@@ -6,7 +6,7 @@ import { Pill, Activity, Bell, Brain, Check, Plus, HeartPulse, Mic } from "lucid
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Link, useNavigate } from "react-router-dom";
-import { speak, listen, requestNotificationPermission, showNotification } from "@/lib/voice";
+import { speak, listen, requestNotificationPermission, showNotification, unlockAudio, playAlarmSound } from "@/lib/voice";
 import { generateInsights, calculateHealthScore, MedLog, HealthLog } from "@/lib/insights";
 import { toast } from "sonner";
 import { Bar } from "react-chartjs-2";
@@ -47,9 +47,14 @@ export default function Dashboard() {
   const [savingEm, setSavingEm] = useState(false);
 
 
-
-
-
+  // Trigger visual screen shake when alarm opens (simulates vibration for laptops)
+  useEffect(() => {
+    if (alarmMed) {
+      document.body.classList.add("animate-vibrate-screen");
+      const t = setTimeout(() => document.body.classList.remove("animate-vibrate-screen"), 800);
+      return () => { clearTimeout(t); document.body.classList.remove("animate-vibrate-screen"); };
+    }
+  }, [alarmMed]);
   async function updateEmergencyProfile() {
     setSavingEm(true);
     try {
@@ -75,15 +80,26 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { if (user) load(); }, [user]);
-  useEffect(() => { requestNotificationPermission(); }, []);
+
+  // Request notification permission and pre-warm audio/speech on first user interaction
+  useEffect(() => {
+    requestNotificationPermission();
+    const unlock = () => { unlockAudio(); document.removeEventListener('click', unlock); document.removeEventListener('keydown', unlock); };
+    document.addEventListener('click', unlock, { once: true });
+    document.addEventListener('keydown', unlock, { once: true });
+    return () => { document.removeEventListener('click', unlock); document.removeEventListener('keydown', unlock); };
+  }, []);
+
+  const alarmCheckedRef = useRef(new Set<string>());
 
   // Smart reminder loop: warns 5 min before, alerts on time, escalates if overdue
   useEffect(() => {
-    const checked = new Set<string>();
-    const id = setInterval(() => {
+    // Run immediately once, then every 5 seconds
+    const checkAlarms = () => {
       const nowD = new Date();
       const today = nowD.toISOString().slice(0, 10);
       const nowMin = nowD.getHours() * 60 + nowD.getMinutes();
+      
       meds.forEach((m) => {
         m.times.forEach((t) => {
           const [hh, mm] = t.split(":").map(Number);
@@ -94,15 +110,18 @@ export default function Dashboard() {
           );
           if (alreadyLogged) return;
 
+          const checked = alarmCheckedRef.current;
+
           // 5 min advance warning
           const warnKey = `warn-${m.id}-${t}-${today}`;
           if (diff === 5 && !checked.has(warnKey)) {
             checked.add(warnKey);
             toast(`⏰ ${m.name} in 5 minutes`, { description: m.dosage });
           }
-          // On-time alert
+          
+          // On-time alert (triggers if diff is between 0 and -14 to catch missed exact minutes)
           const dueKey = `due-${m.id}-${t}-${today}`;
-          if (diff === 0 && !checked.has(dueKey)) {
+          if (diff <= 0 && diff > -15 && !checked.has(dueKey)) {
             checked.add(dueKey);
             showNotification("MediRecall — time for your dose", `${m.name}${m.dosage ? ` (${m.dosage})` : ""}`);
             
@@ -111,17 +130,21 @@ export default function Dashboard() {
             toast(`💊 Time for ${m.name}`, { description: m.dosage, duration: 10000 });
             setAlarmMed({ med: m, time: t });
           }
-          // Overdue escalation at 15 min
+          
+          // Overdue escalation at 15 min or more
           const overKey = `over-${m.id}-${t}-${today}`;
-          if (diff === -15 && !checked.has(overKey)) {
+          if (diff <= -15 && !checked.has(overKey)) {
             checked.add(overKey);
-            showNotification("⚠️ Dose overdue", `${m.name} was scheduled 15 min ago`);
+            showNotification("⚠️ Dose overdue", `${m.name} was scheduled ${Math.abs(diff)} min ago`);
             speak(`Reminder: your ${m.name} dose is overdue`);
-            toast.warning(`${m.name} is 15 min overdue`, { duration: 12000 });
+            toast.warning(`${m.name} is ${Math.abs(diff)} min overdue`, { duration: 12000 });
           }
         });
       });
-    }, 30 * 1000);
+    };
+
+    checkAlarms(); // initial check
+    const id = setInterval(checkAlarms, 5 * 1000); // Check every 5 seconds
     return () => clearInterval(id);
   }, [meds, logs]);
 
@@ -139,7 +162,7 @@ export default function Dashboard() {
   async function load() {
     if (!user) return;
     try {
-      const [allMedsData, allLogsData, allHealthData, allVoiceData] = await Promise.all([
+      const [allMedsData, allLogsData, allHealthData] = await Promise.all([
         apiFetch("/api/medications"),
         apiFetch("/api/medications/logs?limit=200"),
         apiFetch("/api/health-logs?limit=100"),
@@ -209,12 +232,16 @@ export default function Dashboard() {
 
   async function logSymptom(value: string) {
     if (!user) return;
-    await apiFetch("/api/patients/health-log", {
-      method: "POST",
-      body: JSON.stringify({ type: "symptom", value }),
-    });
-    toast.success(`Logged: ${value}`);
-    load();
+    try {
+      await apiFetch("/api/patients/health-log", {
+        method: "POST",
+        body: JSON.stringify({ type: "symptom", value }),
+      });
+      toast.success(`✅ Logged: ${value}`);
+      load();
+    } catch (err: any) {
+      toast.error("Failed to log symptom: " + (err.message || "Unknown error"));
+    }
   }
 
   const nextDose = todaysSchedule.find((s) => !s.logged);
@@ -241,6 +268,19 @@ export default function Dashboard() {
         </div>
         
         <div className="flex flex-wrap items-center gap-2">
+          <Button 
+            onClick={() => {
+              // Manual demo trigger
+              const testMed = meds.length > 0 ? meds[0] : { id: "test", name: "Demo Medicine", dosage: "1 pill", times: [] };
+              const t = new Date();
+              const timeStr = `${t.getHours().toString().padStart(2, '0')}:${t.getMinutes().toString().padStart(2, '0')}`;
+              setAlarmMed({ med: testMed, time: timeStr });
+            }} 
+            variant="outline" 
+            className="border-primary/50 text-primary hover:bg-primary/10 hover-bounce shadow-soft"
+          >
+            <Bell className="w-4 h-4 mr-2" /> Simulate Alarm Demo
+          </Button>
           <Button 
             onClick={() => setShowEmergency(true)} 
             variant="default" 
@@ -418,11 +458,36 @@ export default function Dashboard() {
             />
           </div>
           <p className="text-sm text-muted-foreground mb-4">Tap a symptom or mood to log it instantly.</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mb-5">
             {["Headache","Nausea","Fatigue","Dizziness","Pain","Happy","Anxious","Calm"].map((s) => (
               <Button key={s} variant="outline" size="sm" onClick={() => logSymptom(s)} className="hover-bounce">{s}</Button>
             ))}
           </div>
+          {health.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Recently logged</div>
+              <div className="space-y-1.5">
+                {health.slice(0, 3).map((h: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-sm p-2 rounded-lg bg-secondary/40">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">
+                        {["happy","calm"].includes(h.value?.toLowerCase()) ? "😊" :
+                         ["anxious"].includes(h.value?.toLowerCase()) ? "😟" :
+                         ["headache","pain","nausea","dizziness","fatigue"].some(x => h.value?.toLowerCase().includes(x)) ? "🤒" : "📝"}
+                      </span>
+                      <span className="font-medium capitalize">{h.value}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {h.created_at ? new Date(h.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {health.length === 0 && (
+            <p className="text-xs text-muted-foreground mt-2 italic">No health logs yet — tap a button above to get started!</p>
+          )}
         </div>
         
         <div className="glass-card rounded-2xl p-6">
@@ -485,6 +550,19 @@ export default function Dashboard() {
               }}
             >
               Skip Dose
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="w-full text-xs text-muted-foreground hover:text-primary gap-2"
+              onClick={() => {
+                document.body.classList.add("animate-vibrate-screen");
+                setTimeout(() => document.body.classList.remove("animate-vibrate-screen"), 800);
+                playAlarmSound();
+                speak(`This is a test. Time to take your ${alarmMed?.med.name || "medication"}.`);
+              }}
+            >
+              🔔 Test Alarm & Vibration
             </Button>
 
             <div className="flex items-center justify-center gap-3 pt-2">
@@ -557,16 +635,21 @@ export default function Dashboard() {
             <div className="flex flex-col items-center justify-center p-6 bg-accent-soft/30 rounded-2xl border border-border text-center">
               <div className="bg-white p-4 rounded-xl shadow-md mb-4">
                 <QRCodeSVG 
-                  value={`${window.location.origin}/emergency/${user?.id}`} 
+                  value={`${import.meta.env.VITE_PUBLIC_URL || window.location.origin}/emergency/${user?.id}`} 
                   size={200}
                   level="H"
-                  fgColor="#b91c1c"
+                  fgColor="#000000"
                 />
               </div>
               <h3 className="font-bold text-lg text-destructive">Emergency Scan</h3>
               <p className="text-sm text-muted-foreground mt-2">
                 Keep this code on your lock screen or in your wallet. First responders can scan it to instantly access your life-saving medical data.
               </p>
+              {import.meta.env.VITE_PUBLIC_URL && (
+                <p className="text-[10px] text-muted-foreground mt-1 break-all">
+                  {`${import.meta.env.VITE_PUBLIC_URL}/emergency/${user?.id}`}
+                </p>
+              )}
               <Button 
                 variant="outline" 
                 className="mt-4 w-full"

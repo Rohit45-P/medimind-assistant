@@ -32,7 +32,7 @@ def log_health_status(log: HealthLogCreate, current_user=Depends(get_current_use
         "user_id": current_user.id,
         "type": log.type,
         "value": log.value,
-        "notes": log.notes
+        "note": log.notes or ""
     }
     res = supabase.table("health_logs").insert(data).execute()
     return {"message": "Health log saved", "data": res.data}
