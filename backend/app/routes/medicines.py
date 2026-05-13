@@ -5,12 +5,12 @@ from app.dependencies import get_current_user
 
 router = APIRouter()
 
-@router.get("/")
+@router.get("")
 def get_medicines(current_user=Depends(get_current_user)):
     res = supabase.table("medications").select("*").eq("user_id", current_user.id).execute()
     return res.data
 
-@router.post("/")
+@router.post("")
 def add_medicine(medicine: MedicineCreate, current_user=Depends(get_current_user)):
     data = {
         "user_id": current_user.id,

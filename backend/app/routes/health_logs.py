@@ -4,7 +4,7 @@ from app.dependencies import get_current_user
 
 router = APIRouter()
 
-@router.get("/")
+@router.get("")
 def get_health_logs(since: str = None, limit: int = 200, current_user=Depends(get_current_user)):
     query = supabase.table("health_logs").select("*").eq("user_id", current_user.id)
     if since:
