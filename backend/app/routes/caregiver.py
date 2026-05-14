@@ -66,3 +66,51 @@ def get_patient_status(patient_id: str, current_user=Depends(get_current_user)):
         "recent_activity": recent_logs.data,
         "needs_attention": len(adherence_data["alerts"]) > 0
     }
+
+@router.get("/emergency-alerts")
+def get_emergency_alerts(current_user=Depends(get_current_user)):
+    """Return all active (unresolved) emergency alerts for patients linked to this caregiver."""
+    # Get linked patient IDs
+    links_res = supabase.table("caregiver_links").select("patient_id").eq("caregiver_id", current_user.id).execute()
+    ids = [l["patient_id"] for l in (links_res.data or [])]
+    if not ids:
+        return []
+
+    # Get unresolved alerts for those patients
+    alerts_res = supabase.table("emergency_alerts") \
+        .select("*") \
+        .in_("patient_id", ids) \
+        .eq("resolved", False) \
+        .order("created_at", desc=True) \
+        .execute()
+    alerts = alerts_res.data or []
+
+    # Enrich with patient names from profiles
+    if alerts:
+        alert_patient_ids = list({a["patient_id"] for a in alerts})
+        profs_res = supabase.table("profiles").select("id, full_name").in_("id", alert_patient_ids).execute()
+        name_map = {p["id"]: p["full_name"] for p in (profs_res.data or [])}
+        for a in alerts:
+            a["patient_name"] = name_map.get(a["patient_id"], "Unknown Patient")
+
+    return alerts
+
+
+@router.patch("/emergency-alerts/{alert_id}/resolve")
+def resolve_emergency_alert(alert_id: str, current_user=Depends(get_current_user)):
+    """Caregiver marks an emergency alert as resolved."""
+    from datetime import datetime, timezone
+    # Verify the alert belongs to a linked patient
+    links_res = supabase.table("caregiver_links").select("patient_id").eq("caregiver_id", current_user.id).execute()
+    ids = [l["patient_id"] for l in (links_res.data or [])]
+
+    alert_res = supabase.table("emergency_alerts").select("patient_id").eq("id", alert_id).execute()
+    if not alert_res.data or alert_res.data[0]["patient_id"] not in ids:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Not authorized to resolve this alert")
+
+    supabase.table("emergency_alerts").update({
+        "resolved": True,
+        "resolved_at": datetime.now(timezone.utc).isoformat()
+    }).eq("id", alert_id).execute()
+    return {"message": "Alert resolved"}

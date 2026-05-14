@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 
 from app.routes import auth, medicines, patients, caregiver, analytics
-from app.routes import health_logs, public, voice_notes
+from app.routes import health_logs, public, voice_notes, emergency_alerts
 
 load_dotenv()
 
@@ -38,6 +38,7 @@ app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"]
 app.include_router(health_logs.router, prefix="/api/health-logs", tags=["Health Logs"])
 app.include_router(public.router, prefix="/api/public", tags=["Public"])
 app.include_router(voice_notes.router, prefix="/api/voice-notes", tags=["Voice Notes"])
+app.include_router(emergency_alerts.router, prefix="/api/emergency", tags=["Emergency Alerts"])
 
 @app.get("/")
 def read_root():

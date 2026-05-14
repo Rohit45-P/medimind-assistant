@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { apiFetch } from "@/lib/api";
-import { Pill, Activity, Bell, Brain, Check, Plus, HeartPulse, Mic } from "lucide-react";
+import { Pill, Activity, Bell, Brain, Check, Plus, HeartPulse, Mic, Siren } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Link, useNavigate } from "react-router-dom";
@@ -45,6 +45,27 @@ export default function Dashboard() {
   const [emContacts, setEmContacts] = useState(profile?.emergency_contacts || "");
   const [emDiseases, setEmDiseases] = useState(profile?.diseases || "");
   const [savingEm, setSavingEm] = useState(false);
+  const [sosLoading, setSosLoading] = useState(false);
+
+  async function sendEmergencyAlert(customMessage?: string) {
+    setSosLoading(true);
+    try {
+      await apiFetch("/api/emergency/alert", {
+        method: "POST",
+        body: JSON.stringify({ message: customMessage || "Patient needs immediate help!" }),
+      });
+      playAlarmSound();
+      speak("Emergency alert sent to your caregiver. Opening your emergency profile.");
+      toast.error("🚨 Emergency alert sent to your caregiver!", { duration: 8000 });
+      showNotification("🚨 Emergency Alert Sent", "Your caregiver has been notified.");
+    } catch (err: any) {
+      // Even if alert fails, still open emergency page
+      toast.error("⚠️ Could not notify caregiver, but opening emergency profile.");
+    }
+    // Always open the public emergency medical profile (for first responders)
+    window.open(`/emergency/${user?.id}`, "_blank");
+    setSosLoading(false);
+  }
 
 
   // Trigger visual screen shake when alarm opens (simulates vibration for laptops)
@@ -281,6 +302,15 @@ export default function Dashboard() {
           >
             <Bell className="w-4 h-4 mr-2" /> Simulate Alarm Demo
           </Button>
+          <Button
+            onClick={() => sendEmergencyAlert()}
+            disabled={sosLoading}
+            variant="default"
+            className="relative overflow-hidden bg-gradient-to-r from-red-600 to-rose-500 text-white hover:from-red-500 hover:to-rose-400 hover-bounce shadow-elegant animate-pulse-soft border-0 font-bold text-base px-5 py-2.5"
+          >
+            <Siren className="w-5 h-5 mr-2 animate-bounce" />
+            {sosLoading ? "Sending SOS…" : "🚨 SOS Emergency"}
+          </Button>
           <Button 
             onClick={() => setShowEmergency(true)} 
             variant="default" 
@@ -301,9 +331,7 @@ export default function Dashboard() {
                 const sym = ["headache","pain","nausea","dizziness","fatigue"].find(s => t.includes(s.slice(0,4))) || "symptom";
                 logSymptom(sym);
               } else if (t.includes("emergency") || t.includes("help") || t.includes("not feeling well")) {
-                toast.error("⚠️ Emergency detected. Redirecting to profile...", { duration: 5000 });
-                speak("Emergency detected. Opening emergency profile.");
-                navigate(`/emergency/${user?.id}`);
+                sendEmergencyAlert("Voice SOS triggered: " + text);
               } else {
                 toast("Try: 'I took my medicine', 'I have a headache', or 'Emergency'");
               }
