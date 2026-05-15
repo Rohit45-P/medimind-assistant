@@ -167,8 +167,13 @@ export default function Caregiver() {
                   <div className="font-semibold text-white text-sm flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
                     {getPatientName(alert)}
+                    {alert.message?.includes("AUTO-DETECTED") && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/30 border border-violet-500/50 text-violet-300 font-bold uppercase tracking-wider">
+                        🤖 Auto SOS
+                      </span>
+                    )}
                   </div>
-                  <div className="text-xs text-red-200/70 mt-1">{alert.message}</div>
+                  <div className="text-xs text-red-200/70 mt-1 leading-relaxed">{alert.message}</div>
                   <div className="text-[10px] text-red-300/50 mt-1">
                     {new Date(alert.created_at).toLocaleString([], {
                       month: "short", day: "numeric",
@@ -295,7 +300,14 @@ export default function Caregiver() {
                       <div key={alert.id} className="flex items-center gap-3 bg-red-950/40 border border-red-500/30 rounded-xl p-3">
                         <Siren className="w-5 h-5 text-red-400 shrink-0 animate-bounce" />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-semibold text-red-300">Emergency Alert</div>
+                          <div className="text-sm font-semibold text-red-300 flex items-center gap-2">
+                            Emergency Alert
+                            {alert.message?.includes("AUTO-DETECTED") && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/30 border border-violet-500/50 text-violet-300 font-bold uppercase">
+                                🤖 Auto
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xs text-red-200/70">{alert.message}</div>
                         </div>
                         <Button

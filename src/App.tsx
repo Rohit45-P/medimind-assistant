@@ -16,6 +16,7 @@ import Summary from "./pages/Summary";
 import Caregiver from "./pages/Caregiver";
 import Emergency from "./pages/Emergency";
 import NotFound from "./pages/NotFound";
+import SmartSOS from "./pages/SmartSOS";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/app" element={<RoleRedirect />} />
             <Route path="/emergency/:id" element={<Emergency />} />
+            <Route path="/smart-sos" element={<ProtectedRoute role="patient"><AppLayout><SmartSOS /></AppLayout></ProtectedRoute>} />
 
             <Route path="/dashboard" element={<ProtectedRoute role="patient"><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
             <Route path="/medications" element={<ProtectedRoute role="patient"><AppLayout><Medications /></AppLayout></ProtectedRoute>} />

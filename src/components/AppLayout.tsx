@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Pill, Activity, Bell, Users, FileText, LogOut, Moon, Sun } from "lucide-react";
+import { LayoutDashboard, Pill, Activity, Bell, Users, FileText, LogOut, Moon, Sun, Siren } from "lucide-react";
 import { useEffect, useState, ReactNode } from "react";
 import Logo from "@/components/Logo";
 
@@ -11,6 +11,7 @@ const patientNav = [
   { to: "/timeline", label: "Health Timeline", icon: Activity },
   { to: "/insights", label: "Insights", icon: Bell },
   { to: "/summary", label: "Doctor Summary", icon: FileText },
+  { to: "/smart-sos", label: "Smart Auto SOS", icon: Siren },
 ];
 const caregiverNav = [
   { to: "/caregiver", label: "Patients", icon: Users },
